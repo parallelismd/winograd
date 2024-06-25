@@ -1,0 +1,6 @@
+.driver.c.swp
+*.swp
+*.out
+*.err
+winograd
+optimized

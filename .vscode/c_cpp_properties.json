@@ -1,0 +1,29 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "linux-gcc-arm64"
+        },
+        {
+            "name": "bisheng",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/shareofs/apps/mpi/hmpi/2.3.0-bisheng3.2.0/include/**",
+                "/shareofs/apps/libs/kml/2.2.0-bisheng3.2.0/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/shareofs/apps/compilers/bisheng/3.2.0/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "linux-clang-arm64"
+        }
+    ],
+    "version": 4
+}
