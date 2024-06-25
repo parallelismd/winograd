@@ -9,7 +9,7 @@
 #include <linux/time.h>
 
 
-#define TIMING
+// #define TIMING
 
 #ifdef TIMING
 struct timespec __start_t;
@@ -33,6 +33,7 @@ struct timespec __start_t;
 #else
 #define SET_TIME
 #define PRTT
+#define PRTTM
 #endif
 
 const float G[4][3] = {
@@ -106,8 +107,7 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
   const int sizeF = 3 * 3;
   const int sizeO = outHeight * outWidth;
   const long P = outHeight / 2 * outWidth / 2 * N;
-
-  printf("sizeI: %ld, sizeF: %d, sizeO: %d, P: %ld, N: %d,C: %d, K: %d\n", sizeI, sizeF, sizeO, P, N, C, K);
+  printf("sizeI: %ld, sizeF: %d, sizeO: %d, P: %ld, N: %d,C: %d, K: %d, parallel: %d %d\n", sizeI, sizeF, sizeO, P, N, C, K, BlasGetParallel(),BlasGetNumThreads());
 
   SET_TIME;
 
