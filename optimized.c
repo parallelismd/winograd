@@ -8,11 +8,12 @@
 #include <mpi.h>
 #include <linux/time.h>
 
-struct timespec __start_t;
 
-// #define TIMING
+#define TIMING
 
 #ifdef TIMING
+struct timespec __start_t;
+
 #define SET_TIME \
   clock_gettime(CLOCK_MONOTONIC, &__start_t);
 
@@ -21,6 +22,14 @@ struct timespec __start_t;
   clock_gettime(CLOCK_MONOTONIC, &__end_t); \
   long __time = (__end_t.tv_sec - __start_t.tv_sec) * 1000000000 + (__end_t.tv_nsec - __start_t.tv_nsec); \
   printf("+%.5fms\n", __time / 1000000.0);}
+
+
+#define PRTTM(format, message...) {\
+  struct timespec __end_t; \
+  clock_gettime(CLOCK_MONOTONIC, &__end_t); \
+  long __time = (__end_t.tv_sec - __start_t.tv_sec) * 1000000000 + (__end_t.tv_nsec - __start_t.tv_nsec); \
+  printf("+%.5fms " format, __time / 1000000.0, message);}
+  
 #else
 #define SET_TIME
 #define PRTT
@@ -70,7 +79,7 @@ void sgemm_parallel(const float *A, const float *B, float *out, const int M, con
   float alpha = 1.0, beta = 2.0;
   // has some problems
   cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, alpha, A, lda, B, ldb, beta, out, ldc);
-
+  //TODO replace the kml with custom intrins paralleled gemm
   // /*
   // for (int k = 0; k < K; ++k)
   // #pragma omp parallel for collapse(2)
@@ -119,7 +128,7 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
     }
   }
 
-  PRTT;
+  PRTTM("stage 1 complete\n", "");
   // V[:, :, c, p] = B_T * image[c, b, :, :] * B
   float tmp_v[16];
   float d[16]; // d: [4 * 4];
@@ -148,9 +157,10 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
       }
     }
 
-  PRTT;
-  //TODO try to completely rewrite the 
+  PRTTM("stage 2 complete\n", "");
+  //TODO try to completely rewrite the last part
   // M[xi, nu, :, :] = U[xi, nu, :, :] * V[xi, nu, :, :]
+  #pragma omp parallel for collapse(2)
   for (int xi = 0; xi < 4; ++xi)
   {
     for (int nu = 0; nu < 4; ++nu)
@@ -159,14 +169,16 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
       float *U_ptr = U + (long)(xi * 4 + nu) * K * C;
       float *V_ptr = V + (long)(xi * 4 + nu) * C * P;
       sgemm_parallel(U_ptr, V_ptr, M_ptr, K, C, P); //TODO this is the big gemm
+      PRTTM("stage 3 big gemm\n", "");
     }
   }
 
-  PRTT;
+  PRTTM("stage 3 big gemm complete\n", "");
   // Y = A_T * m * A
   float mm[16];      // 4 * 4
   float tmp_m[8];    // 2 * 4
   float temp_out[4]; // 2 * 2
+
   #pragma omp parallel for collapse(4) private(mm, temp_out, tmp_m)
   for (int n = 0; n < N; ++n)
     for (int k = 0; k < K; ++k)
@@ -192,5 +204,5 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
         }
       }
     }
-    PRTT;
+  PRTTM("stage 4 complete N=%ld,K=%ld,outHeight=%ld,outWidth=%ld\n", N, K, outHeight, outWidth);
 }
