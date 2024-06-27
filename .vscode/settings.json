@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "kblas.h": "c",
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "random": "cpp"
     }
 }
