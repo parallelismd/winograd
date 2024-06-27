@@ -70,13 +70,14 @@ void sgemm(const float *A, const float *B, float *out, const int M, const int K,
 #define B(i, j) B[(i) * K + (j)]
 #define C(i, j) C[(i) * K + (j)]
 
-// 2 * 4
+// 1 * 4
 void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK, float *A, float *B, float *C, const uint64_t M, const uint64_t N, const uint64_t K)
 {
-  float32x4_t a0, a1, a2, a3, b0, b1, b2, b3;
-  for (int i = 0; i < sizeM; i += 4)
+  int i,j;
+  float32x4_t a0, a1, a2, a3, b0, b1;
+  for (i = 0; i < sizeM; i += 4)
   {
-    for (int j = 0; j < sizeN; j += 8)
+    for (j = 0; j < sizeN; j += 4)
     {
       float32x4_t c00 = vld1q_f32(&C(i + 0, j + 0));
       float32x4_t c01 = vld1q_f32(&C(i + 0, j + 4));
@@ -96,9 +97,7 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
 
         b0 = vld1q_f32(&B(k, j + 0));
         b1 = vld1q_f32(&B(k, j + 4));
-        // b2 = vld1q_f32(B(k, j + 8));
-        // b3 = vld1q_f32(B(k, j + 12));
-
+ 
         c00 = vmlaq_f32(c00, a0, b0);
         c10 = vmlaq_f32(c10, a1, b0);
         c20 = vmlaq_f32(c20, a2, b0);
@@ -111,20 +110,21 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
       }
 
       vst1q_f32(&C(i + 0, j + 0), c00);
-      vst1q_f32(&C(i + 0, j + 4), c01);
       vst1q_f32(&C(i + 1, j + 0), c10);
-      vst1q_f32(&C(i + 1, j + 4), c11);
       vst1q_f32(&C(i + 2, j + 0), c20);
-      vst1q_f32(&C(i + 2, j + 4), c21);
       vst1q_f32(&C(i + 3, j + 0), c30);
+      vst1q_f32(&C(i + 0, j + 4), c01);
+      vst1q_f32(&C(i + 1, j + 4), c11);
+      vst1q_f32(&C(i + 2, j + 4), c21);
       vst1q_f32(&C(i + 3, j + 4), c31);
     }
   }
+
 }
 
-#define M_BLOCKING 32
+#define M_BLOCKING 16
 #define N_BLOCKING 16
-#define K_BLOCKING 512
+#define K_BLOCKING 32
 
 void sgemm__(float *A, float *B, float *C, const uint64_t M, const uint64_t K, const uint64_t N)
 {
@@ -263,16 +263,30 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
   PRTTM("stage 2 complete\n", "");
 // TODO try to completely rewrite the last part
 //  M[xi, nu, :, :] = U[xi, nu, :, :] * V[xi, nu, :, :]
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(4)
   for (int xi = 0; xi < 4; ++xi)
   {
     for (int nu = 0; nu < 4; ++nu)
     {
-      float *M_ptr = M + (long)(xi * 4 + nu) * K * P;
-      float *U_ptr = U + (long)(xi * 4 + nu) * K * C;
-      float *V_ptr = V + (long)(xi * 4 + nu) * C * P;
-      sgemm__(U_ptr, V_ptr, M_ptr, K, C, P); // TODO this is the big gemm
-      PRTTM("stage 3 big gemm %d %d %d from %d\n", K, C, P, omp_get_thread_num());
+        float *M_ptr = M + (long)(xi * 4 + nu) * K * P;
+        float *U_ptr = U + (long)(xi * 4 + nu) * K * C;
+        float *V_ptr = V + (long)(xi * 4 + nu) * C * P;
+        for (int mb_id = 0; mb_id < K; mb_id += M_BLOCKING)
+        {
+     
+          for (int kb_id = 0; kb_id < C; kb_id += K_BLOCKING)
+          {
+            for (int nb_id = 0; nb_id < P; nb_id += N_BLOCKING)
+            {
+#define A(i, j) U_ptr[(i) * P + (j)]
+#define B(i, j) V_ptr[(i) * C + (j)]
+#define C(i, j) M_ptr[(i) * C + (j)]
+              block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &A(mb_id, kb_id), &B(kb_id, nb_id), &C(mb_id, nb_id), K,C,P);
+            }
+          }
+        }
+      // sgemm__(U_ptr, V_ptr, M_ptr, K, C, P); // TODO this is the big gemm
+        PRTTM("stage 3 big gemm %d %d %d from %d\n", K, C, P, omp_get_thread_num());
     }
   }
 
