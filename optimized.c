@@ -71,7 +71,7 @@ void sgemm(const float *A, const float *B, float *out, const int M, const int K,
 
 void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK, float *A, float *B, float *C, const uint64_t M, const uint64_t N, const uint64_t K)
 {
-  int i,j;
+  int i, j;
   float32x4_t a0, a1, a2, a3, b0, b1;
   for (i = 0; i < sizeM; i += 4)
   {
@@ -95,7 +95,7 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
 
         b0 = vld1q_f32(&B(k, j + 0));
         b1 = vld1q_f32(&B(k, j + 4));
- 
+
         c00 = vmlaq_f32(c00, a0, b0);
         c10 = vmlaq_f32(c10, a1, b0);
         c20 = vmlaq_f32(c20, a2, b0);
@@ -104,7 +104,6 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
         c11 = vmlaq_f32(c11, a1, b1);
         c21 = vmlaq_f32(c21, a2, b1);
         c31 = vmlaq_f32(c31, a3, b1);
-
       }
 
       vst1q_f32(&C(i + 0, j + 0), c00);
@@ -117,26 +116,25 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
       vst1q_f32(&C(i + 3, j + 4), c31);
     }
   }
-
 }
-#define M_BLOCKING 16
+#define M_BLOCKING 8
 #define N_BLOCKING 16
-#define K_BLOCKING 16
+#define K_BLOCKING 32
 
 void sgemm__(float *A, float *B, float *C, const uint64_t M, const uint64_t N, const uint64_t K)
 {
-    int m_count, n_count, k_count;
-    #pragma omp parallel for private(m_count, n_count, k_count)
-    for (m_count = 0; m_count < M; m_count += M_BLOCKING)
+  int m_count, n_count, k_count;
+#pragma omp parallel for private(m_count, n_count, k_count)
+  for (m_count = 0; m_count < M; m_count += M_BLOCKING)
+  {
+    for (k_count = 0; k_count < N; k_count += K_BLOCKING)
     {
-        for (k_count = 0; k_count < N; k_count += K_BLOCKING)
-        {
-            for (n_count = 0; n_count < K; n_count += N_BLOCKING)
-            {
-                block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &A(m_count, k_count), &B(k_count, n_count), &C(m_count, n_count), M, N, K);
-            }
-        }
+      for (n_count = 0; n_count < K; n_count += N_BLOCKING)
+      {
+        block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &A(m_count, k_count), &B(k_count, n_count), &C(m_count, n_count), M, N, K);
+      }
     }
+  }
 }
 
 // User API for winograd F(2,3)
@@ -207,25 +205,34 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
     }
 
   PRTTM("stage 2 complete\n", "");
-// TODO try to completely rewrite the last part
-//  M[xi, nu, :, :] = U[xi, nu, :, :] * V[xi, nu, :, :]
+  // TODO try to completely rewrite the last part
+  //  M[xi, nu, :, :] = U[xi, nu, :, :] * V[xi, nu, :, :]
   int m_count, n_count, k_count;
-// #pragma omp parallel for collapse(3) private(mb_id, nb_id, kb_id)
+#pragma omp parallel for collapse(3) private(m_count, n_count, k_count)
   for (int xi = 0; xi < 4; ++xi)
   {
     for (int nu = 0; nu < 4; ++nu)
     {
-        float *M_ptr = M + (long)(xi * 4 + nu) * K * P;
-        float *U_ptr = U + (long)(xi * 4 + nu) * K * C;
-        float *V_ptr = V + (long)(xi * 4 + nu) * C * P;
+      float *M_ptr = M + (long)(xi * 4 + nu) * K * P;
+      float *U_ptr = U + (long)(xi * 4 + nu) * K * C;
+      float *V_ptr = V + (long)(xi * 4 + nu) * C * P;
 
-        sgemm__(U_ptr, V_ptr, M_ptr, K, C, P); // TODO this is the big gemm M K N
-        PRTTM("stage 3 big gemm %d %d %d from %d\n", K, C, P, omp_get_thread_num());
-
+      for (m_count = 0; m_count < K; m_count += M_BLOCKING)
+      {
+        for (k_count = 0; k_count < C; k_count += K_BLOCKING)
+        {
+          for (n_count = 0; n_count < P; n_count += N_BLOCKING)
+          {
+            block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &U_ptr[(m_count)*C + (k_count)], &V_ptr[(k_count)*P + (n_count)], &M_ptr[(m_count)*P + (n_count)], K, C, P);
+          }
+        }
+      }
+      // sgemm__(U_ptr, V_ptr, M_ptr, K, C, P); // TODO this is the big gemm M K N
+      PRTTM("stage 3 big gemm %d %d %d from %d / %d\n", K, C, P, omp_get_thread_num(), omp_get_num_threads());
     }
   }
 
-  PRTTM("stage 3 big gemm complete\n", "");
+  PRTTM("stage 3 big gemm complete %d %d %d %d %d %d\n", M_BLOCKING, K_BLOCKING, N_BLOCKING, K / M_BLOCKING, C / K_BLOCKING, P / N_BLOCKING);
   // Y = A_T * m * A
   float mm[16];      // 4 * 4
   float tmp_m[8];    // 2 * 4
