@@ -21,7 +21,7 @@
             "defines": [],
             "compilerPath": "/shareofs/apps/compilers/bisheng/3.2.0/bin/clang",
             "cStandard": "c11",
-            "cppStandard": "gnu++14",
+            "cppStandard": "c++11",
             "intelliSenseMode": "linux-clang-arm64"
         }
     ],

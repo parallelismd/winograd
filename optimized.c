@@ -65,19 +65,17 @@ void sgemm(const float *A, const float *B, float *out, const int M, const int K,
   // case all the matrix multi using this func is small and relatively const
   // let compiler do the optimization
 }
-
 #define A(i, j) A[(i) * N + (j)]
 #define B(i, j) B[(i) * K + (j)]
 #define C(i, j) C[(i) * K + (j)]
 
-// 1 * 4
 void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK, float *A, float *B, float *C, const uint64_t M, const uint64_t N, const uint64_t K)
 {
   int i,j;
   float32x4_t a0, a1, a2, a3, b0, b1;
   for (i = 0; i < sizeM; i += 4)
   {
-    for (j = 0; j < sizeN; j += 4)
+    for (j = 0; j < sizeN; j += 8)
     {
       float32x4_t c00 = vld1q_f32(&C(i + 0, j + 0));
       float32x4_t c01 = vld1q_f32(&C(i + 0, j + 4));
@@ -121,76 +119,24 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
   }
 
 }
-
 #define M_BLOCKING 16
 #define N_BLOCKING 16
-#define K_BLOCKING 32
+#define K_BLOCKING 16
 
-void sgemm__(float *A, float *B, float *C, const uint64_t M, const uint64_t K, const uint64_t N)
+void sgemm__(float *A, float *B, float *C, const uint64_t M, const uint64_t N, const uint64_t K)
 {
-  int mb_id, nb_id, kb_id;
-  for (mb_id = 0; mb_id < M; mb_id += M_BLOCKING)
-  {
-    for (kb_id = 0; kb_id < K; kb_id += K_BLOCKING)
+    int m_count, n_count, k_count;
+    #pragma omp parallel for private(m_count, n_count, k_count)
+    for (m_count = 0; m_count < M; m_count += M_BLOCKING)
     {
-      for (nb_id = 0; nb_id < N; nb_id += N_BLOCKING)
-      {
-        block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &A(mb_id, kb_id), &B(kb_id, nb_id), &C(mb_id, nb_id), M, K, N);
-      }
+        for (k_count = 0; k_count < N; k_count += K_BLOCKING)
+        {
+            for (n_count = 0; n_count < K; n_count += N_BLOCKING)
+            {
+                block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &A(m_count, k_count), &B(k_count, n_count), &C(m_count, n_count), M, N, K);
+            }
+        }
     }
-  }
-}
-
-void sgemm_parallel(const float *A, const float *B, float *out, const int M, const int K, const int N)
-{
-  for (int i = 0; i < M; i += 2)
-  {
-    for (int j = 0; j < N; j += 4)
-    {
-      float32x4_t c00_vec = vdupq_n_f32(0.0);
-      float32x4_t c01_vec = vdupq_n_f32(0.0);
-      float32x4_t c10_vec = vdupq_n_f32(0.0);
-      float32x4_t c11_vec = vdupq_n_f32(0.0);
-
-      for (int k = 0; k < K; k += 4)
-      {
-        // Load A matrix elements
-        float32x4_t a0_vec = vld1q_f32(A + i * K + k);
-        float32x4_t a1_vec = vld1q_f32(A + (i + 1) * K + k);
-
-        // Load B matrix elements and process 4 columns
-        float32x4_t b_vec = vld1q_f32(B + k * N + j);
-        c00_vec = vfmaq_laneq_f32(c00_vec, b_vec, a0_vec, 0);
-        c01_vec = vfmaq_laneq_f32(c01_vec, b_vec, a1_vec, 0);
-        c10_vec = vfmaq_laneq_f32(c10_vec, b_vec, a0_vec, 0);
-        c11_vec = vfmaq_laneq_f32(c11_vec, b_vec, a1_vec, 0);
-
-        b_vec = vld1q_f32(B + k * N + j + N);
-        c00_vec = vfmaq_laneq_f32(c00_vec, b_vec, a0_vec, 1);
-        c01_vec = vfmaq_laneq_f32(c01_vec, b_vec, a1_vec, 1);
-        c10_vec = vfmaq_laneq_f32(c10_vec, b_vec, a0_vec, 1);
-        c11_vec = vfmaq_laneq_f32(c11_vec, b_vec, a1_vec, 1);
-
-        b_vec = vld1q_f32(B + k * N + j + 2 * N);
-        c00_vec = vfmaq_laneq_f32(c00_vec, b_vec, a0_vec, 2);
-        c01_vec = vfmaq_laneq_f32(c01_vec, b_vec, a1_vec, 2);
-        c10_vec = vfmaq_laneq_f32(c10_vec, b_vec, a0_vec, 2);
-        c11_vec = vfmaq_laneq_f32(c11_vec, b_vec, a1_vec, 2);
-
-        b_vec = vld1q_f32(B + k * N + j + 3 * N);
-        c00_vec = vfmaq_laneq_f32(c00_vec, b_vec, a0_vec, 3);
-        c01_vec = vfmaq_laneq_f32(c01_vec, b_vec, a1_vec, 3);
-        c10_vec = vfmaq_laneq_f32(c10_vec, b_vec, a0_vec, 3);
-        c11_vec = vfmaq_laneq_f32(c11_vec, b_vec, a1_vec, 3);
-      }
-
-      // Store results back to memory
-      vst1q_f32(out + i * N + j, c00_vec);
-      vst1q_f32(out + i * N + j + N, c01_vec);
-      vst1q_f32(out + (i + 1) * N + j, c10_vec);
-      vst1q_f32(out + (i + 1) * N + j + N, c11_vec);
-    }
-  }
 }
 
 // User API for winograd F(2,3)
@@ -263,7 +209,8 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
   PRTTM("stage 2 complete\n", "");
 // TODO try to completely rewrite the last part
 //  M[xi, nu, :, :] = U[xi, nu, :, :] * V[xi, nu, :, :]
-#pragma omp parallel for collapse(4)
+  int m_count, n_count, k_count;
+// #pragma omp parallel for collapse(3) private(mb_id, nb_id, kb_id)
   for (int xi = 0; xi < 4; ++xi)
   {
     for (int nu = 0; nu < 4; ++nu)
@@ -271,22 +218,10 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
         float *M_ptr = M + (long)(xi * 4 + nu) * K * P;
         float *U_ptr = U + (long)(xi * 4 + nu) * K * C;
         float *V_ptr = V + (long)(xi * 4 + nu) * C * P;
-        for (int mb_id = 0; mb_id < K; mb_id += M_BLOCKING)
-        {
-     
-          for (int kb_id = 0; kb_id < C; kb_id += K_BLOCKING)
-          {
-            for (int nb_id = 0; nb_id < P; nb_id += N_BLOCKING)
-            {
-#define A(i, j) U_ptr[(i) * P + (j)]
-#define B(i, j) V_ptr[(i) * C + (j)]
-#define C(i, j) M_ptr[(i) * C + (j)]
-              block_mul(M_BLOCKING, N_BLOCKING, K_BLOCKING, &A(mb_id, kb_id), &B(kb_id, nb_id), &C(mb_id, nb_id), K,C,P);
-            }
-          }
-        }
-      // sgemm__(U_ptr, V_ptr, M_ptr, K, C, P); // TODO this is the big gemm
+
+        sgemm__(U_ptr, V_ptr, M_ptr, K, C, P); // TODO this is the big gemm M K N
         PRTTM("stage 3 big gemm %d %d %d from %d\n", K, C, P, omp_get_thread_num());
+
     }
   }
 

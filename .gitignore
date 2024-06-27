@@ -4,3 +4,7 @@
 *.err
 winograd
 optimized
+matmul/base
+matmul/conf.data
+matmul/datagen
+matmul/out.data*

@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "kblas.h": "c"
+        "kblas.h": "c",
+        "chrono": "cpp"
     }
 }
