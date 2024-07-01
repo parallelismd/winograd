@@ -3,20 +3,26 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/usr/lib/gcc/aarch64-linux-gnu/10.3.1/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "cppStandard": "gnu++14",
-            "intelliSenseMode": "linux-gcc-arm64"
+            "intelliSenseMode": "linux-gcc-arm64",
+            "compilerArgs": [
+                "-march=armv8-a+sve",
+                "-fopenmp"
+            ]
         },
         {
             "name": "bisheng",
             "includePath": [
                 "${workspaceFolder}/**",
                 "/shareofs/apps/mpi/hmpi/2.3.0-bisheng3.2.0/include/**",
-                "/shareofs/apps/libs/kml/2.2.0-bisheng3.2.0/include/**"
+                "/shareofs/apps/libs/kml/2.2.0-bisheng3.2.0/include/**",
+                "/usr/lib/gcc/aarch64-linux-gnu/10.3.1/include/**"
             ],
             "defines": [],
             "compilerPath": "/shareofs/apps/compilers/bisheng/3.2.0/bin/clang",

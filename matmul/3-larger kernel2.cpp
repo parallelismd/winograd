@@ -98,7 +98,7 @@ void mul(float *A, float *B, float *C, const uint64_t M, const uint64_t N, const
 {
     int m_count, n_count, k_count;
     printf("M=%d, N=%d, K=%d\n", M, N, K);
-    #pragma omp parallel for private(m_count, n_count, k_count)
+    #pragma omp parallel for private(m_count, n_count, k_count) collapse(1)
     for (m_count = 0; m_count < M; m_count += M_BLOCKING)
     {
         for (k_count = 0; k_count < N; k_count += K_BLOCKING)

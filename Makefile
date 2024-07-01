@@ -1,6 +1,6 @@
 CC1 = gcc
 CC2 = clang
-CFLAGS1 = -std=c11 -fopenmp -O3 -g
+CFLAGS1 = -std=c11 -fopenmp -O3 -g 
 CFLAGS2 = -std=c11 -fopenmp -O3 -g -ljemalloc -flto -mcpu=tsv110
 INCLUDES = -I/shareofs/apps/mpi/hmpi/2.3.0-bisheng3.2.0/include \
            -I/shareofs/apps/libs/kml/2.2.0-bisheng3.2.0/include

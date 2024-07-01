@@ -149,7 +149,7 @@ void block_mul(const uint64_t sizeM, const uint64_t sizeN, const uint64_t sizeK,
 }
 #define M_BLOCKING 8
 #define N_BLOCKING 64
-#define K_BLOCKING 16
+#define K_BLOCKING 32
 
 void sgemm_kml(const float *A, const float *B, float *out, const int M, const int K,
                const int N)
@@ -252,6 +252,7 @@ void winconv_2x3(float *__restrict__ image, const int inHeight,
 #ifndef KML
       for (m_count = 0; m_count < K; m_count += M_BLOCKING)
       {
+          PRTTM("stage 3 big gemm start %d %d %d from %d / %d\n", K, C, P, omp_get_thread_num(), omp_get_num_threads());
         for (k_count = 0; k_count < C; k_count += K_BLOCKING)
         {
           for (n_count = 0; n_count < P; n_count += N_BLOCKING)
